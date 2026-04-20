@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nks.leetcodehelper.config.LeetCodeProperties;
 import com.nks.leetcodehelper.model.Problem;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -16,10 +18,13 @@ import java.util.Map;
 @Service
 public class LeetCodeApiClient {
 
+    private static final Logger log = LoggerFactory.getLogger(LeetCodeApiClient.class);
+
     private static final String DAILY_QUERY = """
             query questionOfToday {
               activeDailyCodingChallengeQuestion {
                 question {
+                  questionId
                   questionFrontendId
                   title
                   titleSlug
@@ -53,6 +58,7 @@ public class LeetCodeApiClient {
     private static final String SLUG_QUERY = """
             query questionData($titleSlug: String!) {
               question(titleSlug: $titleSlug) {
+                questionId
                 questionFrontendId
                 title
                 titleSlug
@@ -135,6 +141,8 @@ public class LeetCodeApiClient {
 
     private Problem parseProblem(JsonNode question) {
         String id = question.path("questionFrontendId").asText();
+        String internalId = question.path("questionId").asText();
+        log.info("Problem frontendId={} questionId(raw)={}", id, internalId);
         String title = question.path("title").asText();
         String titleSlug = question.path("titleSlug").asText();
         String difficulty = question.path("difficulty").asText();
@@ -143,8 +151,10 @@ public class LeetCodeApiClient {
         List<String> tags = new ArrayList<>();
         question.path("topicTags").forEach(tag -> tags.add(tag.path("name").asText()));
 
+        boolean isSql = tags.contains("Database");
+        String langSlug = isSql ? props.getSqlLanguage() : props.getAlgLanguage();
+
         String starterCode = "";
-        String langSlug = props.getLanguage();
         for (JsonNode snippet : question.path("codeSnippets")) {
             if (snippet.path("langSlug").asText().equals(langSlug)) {
                 starterCode = snippet.path("code").asText();
@@ -152,7 +162,7 @@ public class LeetCodeApiClient {
             }
         }
 
-        return new Problem(id, title, titleSlug, difficulty, tags, content, starterCode, langSlug);
+        return new Problem(id, internalId, title, titleSlug, difficulty, tags, content, starterCode, langSlug);
     }
 
     private String buildCookie() {

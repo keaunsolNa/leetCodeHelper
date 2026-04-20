@@ -35,7 +35,7 @@ public class LeetCodeSubmitService {
                 .build();
     }
 
-    public SubmissionResult submit(String titleSlug, String questionId, String code) throws InterruptedException {
+    public SubmissionResult submit(String titleSlug, String questionId, String lang, String code) throws InterruptedException {
         String cookie = buildCookie();
 
         String response = restClient.post()
@@ -44,14 +44,18 @@ public class LeetCodeSubmitService {
                 .header("X-CSRFToken", props.getCsrfToken())
                 .header("Referer", "https://leetcode.com/problems/" + titleSlug + "/")
                 .body(Map.of(
-                        "lang", props.getLanguage(),
-                        "question_id", questionId,
+                        "lang", lang,
+                        "question_id", Integer.parseInt(questionId),
                         "typed_code", code
                 ))
                 .retrieve()
                 .body(String.class);
 
-        String submissionId = parseJson(response).path("submission_id").asText();
+        JsonNode submitNode = parseJson(response);
+        String submissionId = submitNode.path("submission_id").asText();
+        if (submissionId.isBlank()) {
+            throw new RuntimeException("LeetCode rejected submission: " + response);
+        }
         log.info("Submitted '{}' - submission ID: {}", titleSlug, submissionId);
 
         return pollResult(submissionId, cookie, titleSlug);
@@ -76,16 +80,25 @@ public class LeetCodeSubmitService {
                 String statusMsg = node.path("status_msg").asText();
                 String runtime = node.path("status_runtime").asText("N/A");
                 String memory = node.path("status_memory").asText("N/A");
+                double runtimePercentile = node.path("runtime_percentile").asDouble(0);
+                double memoryPercentile = node.path("memory_percentile").asDouble(0);
 
+                if (statusCode != STATUS_ACCEPTED) {
+                    String compileError = node.path("compile_error").asText("");
+                    String fullError = node.path("full_compile_error").asText("");
+                    if (!compileError.isBlank()) log.warn("Compile error: {}", compileError);
+                    if (!fullError.isBlank()) log.warn("Full compile error: {}", fullError);
+                }
                 log.info("Result for '{}': {} (code: {})", titleSlug, statusMsg, statusCode);
-                return new SubmissionResult(state, statusMsg, statusCode == STATUS_ACCEPTED, runtime, memory, statusCode);
+                return new SubmissionResult(state, statusMsg, statusCode == STATUS_ACCEPTED,
+                        runtime, memory, statusCode, runtimePercentile, memoryPercentile);
             }
 
             log.debug("Waiting for judgment... attempt {}/{}, state: {}", i + 1, MAX_POLL_ATTEMPTS, state);
         }
 
         log.warn("Timed out waiting for submission result");
-        return new SubmissionResult("TIMEOUT", "Timeout waiting for result", false, "N/A", "N/A", -1);
+        return new SubmissionResult("TIMEOUT", "Timeout waiting for result", false, "N/A", "N/A", -1, 0, 0);
     }
 
     private String buildCookie() {

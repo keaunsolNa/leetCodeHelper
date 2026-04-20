@@ -6,5 +6,7 @@ public record SubmissionResult(
         boolean accepted,
         String runtime,
         String memory,
-        int statusCode
+        int statusCode,
+        double runtimePercentile,
+        double memoryPercentile
 ) {}

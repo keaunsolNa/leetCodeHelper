@@ -9,7 +9,8 @@ public class LeetCodeProperties {
 
     private String session = "";
     private String csrfToken = "";
-    private String language = "java";
+    private String algLanguage = "java";
+    private String sqlLanguage = "mysql";
     private String repoPath = ".";
     private String leetcodeDir = "leetcode";
     private String unsolvedDir = "UnSolved";
@@ -25,8 +26,11 @@ public class LeetCodeProperties {
     public String getCsrfToken() { return csrfToken; }
     public void setCsrfToken(String csrfToken) { this.csrfToken = csrfToken; }
 
-    public String getLanguage() { return language; }
-    public void setLanguage(String language) { this.language = language; }
+    public String getAlgLanguage() { return algLanguage; }
+    public void setAlgLanguage(String algLanguage) { this.algLanguage = algLanguage; }
+
+    public String getSqlLanguage() { return sqlLanguage; }
+    public void setSqlLanguage(String sqlLanguage) { this.sqlLanguage = sqlLanguage; }
 
     public String getRepoPath() { return repoPath; }
     public void setRepoPath(String repoPath) { this.repoPath = repoPath; }

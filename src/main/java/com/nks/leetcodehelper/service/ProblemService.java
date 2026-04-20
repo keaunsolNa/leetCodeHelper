@@ -1,5 +1,8 @@
 package com.nks.leetcodehelper.service;
 
+import com.nks.leetcodehelper.config.LeetCodeProperties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import com.nks.leetcodehelper.model.Problem;
 import com.nks.leetcodehelper.model.SubmissionResult;
 import com.nks.leetcodehelper.service.leetcode.LeetCodeApiClient;
@@ -9,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -24,13 +28,18 @@ public class ProblemService {
     private final LeetCodeSubmitService submitService;
     private final MarkdownService markdownService;
     private final GitService gitService;
+    private final LeetCodeProperties props;
+    private final CodeAnalysisService codeAnalysisService;
 
     public ProblemService(LeetCodeApiClient apiClient, LeetCodeSubmitService submitService,
-                          MarkdownService markdownService, GitService gitService) {
+                          MarkdownService markdownService, GitService gitService,
+                          LeetCodeProperties props, CodeAnalysisService codeAnalysisService) {
         this.apiClient = apiClient;
         this.submitService = submitService;
         this.markdownService = markdownService;
         this.gitService = gitService;
+        this.props = props;
+        this.codeAnalysisService = codeAnalysisService;
     }
 
     public Path fetchAndSaveDailyProblem() throws IOException {
@@ -72,12 +81,6 @@ public class ProblemService {
         return dir;
     }
 
-    /**
-     * 솔루션 파일을 LeetCode에 제출합니다.
-     * Accepted일 경우 파일을 Solved/로 이동하고 Git에 푸시합니다.
-     *
-     * @param filePath 제출할 Solution.java (또는 해당 언어 파일)의 절대 경로
-     */
     public SubmissionResult submitSolution(String filePath) throws IOException, InterruptedException {
         Path solutionFile = Paths.get(filePath);
 
@@ -85,15 +88,28 @@ public class ProblemService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "problem.md를 찾을 수 없습니다. 파일이 UnSolved/{id}-{slug}/ 하위에 있는지 확인하세요: " + filePath));
 
-        log.info("Submitting problem #{} ({})", info.id(), info.slug());
-        SubmissionResult result = submitService.submit(info.slug(), info.id(), info.code());
+        String lang = info.lang() != null ? info.lang()
+                : (info.slug().contains("sql") ? props.getSqlLanguage() : props.getAlgLanguage());
+        log.info("Submitting problem #{} (internal: {}, slug: {}, lang: {})", info.id(), info.internalId(), info.slug(), lang);
+        SubmissionResult result = submitService.submit(info.slug(), info.internalId(), lang, info.code());
 
         if (result.accepted()) {
-            log.info("Accepted! Runtime: {}, Memory: {}", result.runtime(), result.memory());
+            log.info("Accepted! Runtime: {} (beats {}%), Memory: {} (beats {}%)",
+                    result.runtime(), String.format("%.1f", result.runtimePercentile()),
+                    result.memory(), String.format("%.1f", result.memoryPercentile()));
             Path solvedDir = gitService.moveProblemToSolved(info.directory(), info.difficultyDir());
 
-            String commitMsg = String.format("solve: #%s %s | runtime: %s, memory: %s",
-                    info.id(), info.slug(), result.runtime(), result.memory());
+            log.info("Requesting AI code review...");
+            String mdContent = Files.readString(solvedDir.resolve("problem.md"));
+            String difficulty = extractFrontmatter(mdContent, "difficulty");
+            String tags = extractFrontmatter(mdContent, "tags");
+            String aiReview = codeAnalysisService.analyze(info.slug(), difficulty, tags, lang, info.code());
+            markdownService.saveAnalysis(solvedDir, info, result, aiReview);
+
+            String commitMsg = String.format("solve: #%s %s | runtime: %s (%.1f%%), memory: %s (%.1f%%)",
+                    info.id(), info.slug(),
+                    result.runtime(), result.runtimePercentile(),
+                    result.memory(), result.memoryPercentile());
             gitService.commitAndPush(commitMsg);
             log.info("Committed and pushed to Solved: {}", solvedDir);
         } else {
@@ -101,5 +117,10 @@ public class ProblemService {
         }
 
         return result;
+    }
+
+    private String extractFrontmatter(String content, String key) {
+        Matcher matcher = Pattern.compile("^" + key + ":\\s*(.+)$", Pattern.MULTILINE).matcher(content);
+        return matcher.find() ? matcher.group(1).trim() : "N/A";
     }
 }

@@ -2,6 +2,7 @@ package com.nks.leetcodehelper.service;
 
 import com.nks.leetcodehelper.config.LeetCodeProperties;
 import com.nks.leetcodehelper.model.Problem;
+import com.nks.leetcodehelper.model.SubmissionResult;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -9,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -21,18 +24,32 @@ import java.util.regex.Pattern;
 public class MarkdownService {
 
     private static final Map<String, String> LANG_EXTENSIONS = Map.ofEntries(
+            // Algorithm languages
             Map.entry("java", "java"),
             Map.entry("python3", "py"),
             Map.entry("python", "py"),
+            Map.entry("c", "c"),
+            Map.entry("cpp", "cpp"),
+            Map.entry("csharp", "cs"),
             Map.entry("javascript", "js"),
             Map.entry("typescript", "ts"),
-            Map.entry("cpp", "cpp"),
-            Map.entry("c", "c"),
             Map.entry("golang", "go"),
             Map.entry("kotlin", "kt"),
             Map.entry("rust", "rs"),
             Map.entry("swift", "swift"),
-            Map.entry("csharp", "cs")
+            Map.entry("scala", "scala"),
+            Map.entry("ruby", "rb"),
+            Map.entry("php", "php"),
+            Map.entry("racket", "rkt"),
+            Map.entry("erlang", "erl"),
+            Map.entry("elixir", "ex"),
+            Map.entry("dart", "dart"),
+            Map.entry("bash", "sh"),
+            // SQL languages
+            Map.entry("mysql", "sql"),
+            Map.entry("mssql", "sql"),
+            Map.entry("oraclesql", "sql"),
+            Map.entry("pythondata", "py")
     );
 
     private final LeetCodeProperties props;
@@ -89,13 +106,15 @@ public class MarkdownService {
 
         String mdContent = Files.readString(mdFile);
         String id = extractFrontmatter(mdContent, "id");
+        String internalId = extractFrontmatter(mdContent, "internal_id");
         String slug = extractFrontmatter(mdContent, "slug");
         String difficulty = extractFrontmatter(mdContent, "difficulty");
-
+        String lang = extractFrontmatter(mdContent, "lang");
         if (id == null || slug == null || difficulty == null) return Optional.empty();
 
+        String effectiveInternalId = (internalId != null) ? internalId : id;
         String code = Files.readString(solutionFile);
-        return Optional.of(new ProblemFileInfo(id, slug, code, dir, toDifficultyDir(difficulty)));
+        return Optional.of(new ProblemFileInfo(id, effectiveInternalId, slug, lang, code, dir, toDifficultyDir(difficulty)));
     }
 
     public Set<String> collectExistingProblemIds() throws IOException {
@@ -123,6 +142,7 @@ public class MarkdownService {
         return """
                 ---
                 id: %s
+                internal_id: %s
                 slug: %s
                 title: %s
                 difficulty: %s
@@ -139,11 +159,42 @@ public class MarkdownService {
 
                 %s
                 """.formatted(
-                problem.id(), problem.titleSlug(), problem.title(),
+                problem.id(), problem.internalId(), problem.titleSlug(), problem.title(),
                 problem.difficulty(), tags, LocalDate.now(), problem.langSlug(),
                 problem.id(), problem.title(), problem.difficulty(), tags,
                 content
         );
+    }
+
+    public void saveAnalysis(Path solvedDir, ProblemFileInfo info, SubmissionResult result, String aiReview) throws IOException {
+        String submittedAt = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String langDisplay = info.lang() != null ? info.lang() : "N/A";
+        String content = """
+                # Analysis
+
+                | Item | Value |
+                |------|-------|
+                | Submitted | %s |
+                | Language | %s |
+                | Runtime | %s (Beats %.1f%%) |
+                | Memory | %s (Beats %.1f%%) |
+
+                ## Submission
+
+                [View on LeetCode](https://leetcode.com/problems/%s/submissions/)
+
+                ## Code Review
+
+                %s
+                """.formatted(
+                submittedAt,
+                langDisplay,
+                result.runtime(), result.runtimePercentile(),
+                result.memory(), result.memoryPercentile(),
+                info.slug(),
+                aiReview
+        );
+        Files.writeString(solvedDir.resolve("analysis.md"), content);
     }
 
     private String extractFrontmatter(String content, String key) {
@@ -151,5 +202,5 @@ public class MarkdownService {
         return matcher.find() ? matcher.group(1).trim() : null;
     }
 
-    public record ProblemFileInfo(String id, String slug, String code, Path directory, String difficultyDir) {}
+    public record ProblemFileInfo(String id, String internalId, String slug, String lang, String code, Path directory, String difficultyDir) {}
 }

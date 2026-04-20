@@ -4,6 +4,7 @@ import java.util.List;
 
 public record Problem(
         String id,
+        String internalId,
         String title,
         String titleSlug,
         String difficulty,
