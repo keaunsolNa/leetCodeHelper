@@ -1,6 +1,24 @@
 # LeetCode Helper
 
-LeetCode 문제 자동 수신, 코드 제출, Git 정리를 자동화하는 Spring Boot 로컬 서버입니다.
+> **Spring Boot 4.0.5 · Java 24 · Gradle · Groq API · LeetCode GraphQL**
+
+LeetCode 문제 수신 → 풀이 → 제출 → AI 코드 리뷰 → Git 푸시까지의 흐름을 IntelliJ에서 한 번에 처리하는 로컬 자동화 서버입니다.
+
+```
+[Scheduler / IntelliJ]
+        │
+        ▼
+┌──────────────────────┐         ┌─────────────────┐
+│  LeetCode GraphQL    │ ◀────▶  │  Local Spring   │
+│  (문제 수신 / 제출)   │         │  Boot Server    │
+└──────────────────────┘         │  :8080          │
+                                 └────────┬────────┘
+                                          │ Accepted
+                          ┌───────────────┼─────────────────┐
+                          ▼               ▼                 ▼
+                    [ Groq API ]    [ Git commit ]    [ analysis.md ]
+                    한국어 코드 리뷰   UnSolved→Solved   성능지표 저장
+```
 
 ## 주요 기능
 
@@ -11,7 +29,23 @@ LeetCode 문제 자동 수신, 코드 제출, Git 정리를 자동화하는 Spri
 | SQL 문제 지원 | Database 태그 문제를 자동 감지하여 `.sql` 파일로 저장, 별도 언어 설정 적용 |
 | 코드 제출 | IntelliJ External Tool로 현재 열린 Solution 파일을 LeetCode에 제출 |
 | Git 자동화 | Accepted 시 UnSolved → Solved 이동 후 자동 commit & push |
-| AI 코드 리뷰 | Accepted 시 Groq(llama-3.3-70b) 기반 한국어 코드 리뷰를 `analysis.md`에 저장 |
+| AI 코드 리뷰 | Accepted 시 Groq(`llama-3.3-70b-versatile`) 기반 한국어 코드 리뷰를 `analysis.md`에 저장 |
+
+## 기술 스택
+
+- **런타임**: Java 24 (Gradle toolchain)
+- **프레임워크**: Spring Boot 4.0.5 (`spring-boot-starter-web`)
+- **외부 API**: LeetCode GraphQL · Groq Chat Completions (`llama-3.3-70b-versatile`)
+- **파싱**: Jackson · jsoup 1.18.3
+- **빌드**: Gradle (Wrapper 포함)
+
+`build.gradle` 기준 의존성:
+```groovy
+implementation 'org.springframework.boot:spring-boot-starter'
+implementation 'org.springframework.boot:spring-boot-starter-web'
+implementation 'com.fasterxml.jackson.core:jackson-databind'
+implementation 'org.jsoup:jsoup:1.18.3'
+```
 
 ## 디렉터리 구조 (Coding_Test 레포)
 
@@ -86,3 +120,8 @@ Solution 파일 우클릭 → `External Tools → LeetCode Submit`
 ```
 
 서버는 `http://localhost:8080`에서 실행됩니다.
+
+## 더 보기
+
+- [`docs/`](./docs) — 추가 문서
+- 연동되는 풀이 레포: [Coding_Test](https://github.com/keaunsolNa/Coding_Test)
